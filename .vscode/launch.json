@@ -1,0 +1,21 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Django",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/graphql_framework_test_app/manage.py",
+            "args": [
+                "runserver",
+                "--noreload"
+            ],
+            "django": true,
+            "cwd": "${workspaceFolder}/graphql_framework_test_app",
+            "justMyCode": false
+        }
+    ]
+}
