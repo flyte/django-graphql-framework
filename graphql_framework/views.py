@@ -1,5 +1,7 @@
 import json
+from importlib import import_module
 
+from django.conf import settings
 from django.http.response import (
     HttpResponseBadRequest,
     HttpResponseNotAllowed,
@@ -8,7 +10,7 @@ from django.http.response import (
 from django.views.generic import TemplateView
 from graphql import GraphQLObjectType, GraphQLSchema, build_schema, graphql_sync
 
-SCHEMA = dict()
+from .schema import Schema
 
 
 class Root:
@@ -51,7 +53,7 @@ def process_graphql_req(request):
         return HttpResponseBadRequest("Must include 'query' parameter")
     if variables is not None:
         variables = json.loads(variables)
-    schema = GraphQLSchema(GraphQLObjectType("Query", lambda: SCHEMA))
+    schema = GraphQLSchema(GraphQLObjectType("Query", lambda: Schema.registry))
     result = graphql_sync(
         schema, query, Root(), variable_values=variables, operation_name=operation_name
     )

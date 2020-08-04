@@ -112,3 +112,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.0/howto/static-files/
 
 STATIC_URL = "/static/"
+
+GRAPHQL_FRAMEWORK = dict(
+    schema="graphql_framework_test_app.schema"
+)
