@@ -53,7 +53,7 @@ def process_graphql_req(request):
         return HttpResponseBadRequest("Must include 'query' parameter")
     if variables is not None:
         variables = json.loads(variables)
-    schema = GraphQLSchema(GraphQLObjectType("Query", lambda: Schema.registry))
+    schema = Schema.as_schema()
     result = graphql_sync(
         schema, query, Root(), variable_values=variables, operation_name=operation_name
     )

@@ -12,7 +12,12 @@ class UserSerializer(ModelSerializer):
         fields = "__all__"
 
 
+class HumanSchema(SerializerSchema, serializer=UserSerializer, model=User):
+    # def get(self, id):
+    #     return User.objects.get(pk=id)
+    pass
+
+
 class Query(Schema):
-    _human_schema = SerializerSchema(UserSerializer)
-    human = _human_schema.query_singular
-    # humans = _human_schema.query_multiple
+    human = HumanSchema.field_singular(args=("id",))
+    # humans = HUMAN_SCHEMA.query_multiple

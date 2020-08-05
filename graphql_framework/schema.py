@@ -1,4 +1,4 @@
-from graphql import GraphQLArgument, GraphQLField, GraphQLObjectType
+from graphql import GraphQLArgument, GraphQLField, GraphQLObjectType, GraphQLSchema
 from graphql.type.scalars import GraphQLInt
 from rest_framework.fields import IntegerField
 
@@ -6,16 +6,21 @@ from .converter import to_gql_type
 
 
 class Schema:
-    registry = {}
+    fields = {}
 
     def __init_subclass__(cls):
         # See what fields were added and add those to our schema
-        fields = {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("_") and isinstance(v, GraphQLField)
-        }
-        Schema.registry.update(fields)
+        Schema.fields.update(
+            {
+                k: v
+                for k, v in cls.__dict__.items()
+                if not k.startswith("_") and isinstance(v, GraphQLField)
+            }
+        )
+
+    @classmethod
+    def as_schema(cls):
+        return GraphQLSchema(GraphQLObjectType("Query", lambda: Schema.fields))
 
 
 class SerializerSchema:
@@ -23,13 +28,22 @@ class SerializerSchema:
     Turns a Django REST Framework Serializer into a GraphQL CRUD schema.
     """
 
-    def __init__(self, serializer):
-        self.serializer = serializer
+    def __init_subclass__(cls, serializer, model=None):
+        cls.serializer = serializer
+        cls.model = model
 
-    @property
-    def query_singular(self):
+    @classmethod
+    def get(cls, root, info, id):
+        if cls.model is None:
+            raise NotImplementedError("Must provide either a model or get() function")
+        return cls.model.objects.get(pk=id)
+
+    @classmethod
+    def field_singular(cls, args=None):
+        if args is None:
+            args = ()
         # Figure out the fields on the serializer, turn them into graphql ones
-        serializer = self.serializer()
+        serializer = cls.serializer()
         schema = dict()
         for field_name, field in serializer.fields.items():
             try:
@@ -38,10 +52,14 @@ class SerializerSchema:
                 continue
             schema[field_name] = GraphQLField(gql_type)
         return GraphQLField(
-            GraphQLObjectType(self.serializer.__name__, lambda: schema),
-            args=dict(id=GraphQLArgument(GraphQLInt)),
+            GraphQLObjectType(cls.serializer.__name__, lambda: schema),
+            args={
+                arg: GraphQLArgument(to_gql_type(serializer.fields[arg]))
+                for arg in args
+            },
+            resolve=cls.get,
         )
 
-    @property
-    def query_multiple(self):
+    @classmethod
+    def field_list(cls):
         pass
