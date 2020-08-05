@@ -1,6 +1,6 @@
 from graphql import GraphQLArgument, GraphQLField, GraphQLObjectType, GraphQLSchema
 from graphql.type.scalars import GraphQLInt
-from rest_framework.fields import IntegerField
+from rest_framework.fields import SerializerMethodField
 
 from .converter import to_gql_type
 
@@ -28,31 +28,37 @@ class SerializerSchema:
     Turns a Django REST Framework Serializer into a GraphQL CRUD schema.
     """
 
-    def __init_subclass__(cls, serializer, model=None):
-        cls.serializer = serializer
+    def __init_subclass__(cls, serializer_cls, model=None):
+        cls.serializer_cls = serializer_cls
         cls.model = model
 
     @classmethod
-    def get(cls, root, info, id):
+    def get(cls, root, info, **kwargs):
         if cls.model is None:
             raise NotImplementedError("Must provide either a model or get() function")
-        return cls.model.objects.get(pk=id)
+        serializer = cls.serializer_cls(cls.model.objects.get(**kwargs))
+        return serializer.data
 
     @classmethod
     def field_singular(cls, args=None):
         if args is None:
             args = ()
         # Figure out the fields on the serializer, turn them into graphql ones
-        serializer = cls.serializer()
+        serializer = cls.serializer_cls()
         schema = dict()
         for field_name, field in serializer.fields.items():
+            if isinstance(field, SerializerMethodField):
+                try:
+                    field = getattr(serializer, field.method_name).type()
+                except AttributeError:
+                    continue
             try:
                 gql_type = to_gql_type(field)
             except NotImplementedError:
                 continue
             schema[field_name] = GraphQLField(gql_type)
         return GraphQLField(
-            GraphQLObjectType(cls.serializer.__name__, lambda: schema),
+            GraphQLObjectType(cls.serializer_cls.__name__, lambda: schema),
             args={
                 arg: GraphQLArgument(to_gql_type(serializer.fields[arg]))
                 for arg in args
