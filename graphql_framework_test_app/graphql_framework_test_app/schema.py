@@ -1,31 +1,38 @@
 from django.contrib.auth import get_user_model
-from rest_framework.fields import SerializerMethodField, CharField
+from rest_framework.fields import CharField, SerializerMethodField
 from rest_framework.serializers import ModelSerializer
 
+from graphql_framework.decorators import returns
 from graphql_framework.schema import Schema, SerializerSchema
 
 User = get_user_model()
 
 
 class UserSerializer(ModelSerializer):
-    my_method_field = SerializerMethodField()
+    full_name = SerializerMethodField(required=False)
 
     class Meta:
         model = User
         fields = "__all__"
 
-    def get_my_method_field(self, obj):
-        return "It's working!!"
+    @returns(CharField)
+    def get_full_name(self, obj):
+        if not obj.first_name and not obj.last_name:
+            return None
+        if obj.first_name and not obj.last_name:
+            return obj.first_name
+        if not obj.first_name and obj.last_name:
+            return obj.last_name
+        return f"{obj.first_name} {obj.last_name}"
 
-    get_my_method_field.type = CharField
 
 
-class HumanSchema(SerializerSchema, serializer_cls=UserSerializer, model=User):
+class UserSchema(SerializerSchema, serializer_cls=UserSerializer, model=User):
     # def get(self, id):
     #     return User.objects.get(pk=id)
     pass
 
 
 class Query(Schema):
-    human = HumanSchema.field_singular(args=("id",))
+    human = UserSchema.field_singular(lookup_fields=("id", "username", "email"))
     # humans = HUMAN_SCHEMA.query_multiple
