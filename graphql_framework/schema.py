@@ -13,22 +13,35 @@ from .converter import to_gql_type
 if TYPE_CHECKING:
     from typing import Dict, Type
     from rest_framework.serializers import ModelSerializer
+    from rest_framework.fields import Field as SerializerField
     from django.db.models import Model
     from django.db.models import QuerySet
 
 
+def serializer_field_to_gql_field(serializer_field: Type[SerializerField]):
+    nullable = None
+    if isinstance(serializer_field, TypedSerializerMethodField):
+        nullable = not serializer_field.required
+        serializer_field = serializer_field.field_type()
+    try:
+        gql_type = to_gql_type(serializer_field, nullable=nullable)
+    except NotImplementedError:
+        return None
+    return GraphQLField(gql_type)
+
+
 class Schema:
-    _schemas = {}  # type: Dict[str, ModelSerializerSchema]
+    _types = {}  # type: Dict[str, ModelSerializerType]
     schema = None
     objecttype_registry = {}  # type: Dict[str, GraphQLObjectType]
 
     def __init_subclass__(cls):
         # See what fields were added and add those to our schema
-        Schema._schemas.update(
+        Schema._types.update(
             {
                 k: v
                 for k, v in cls.__dict__.items()
-                if not k.startswith("_") and isinstance(v, ModelSerializerSchema)
+                if not k.startswith("_") and isinstance(v, ModelSerializerType)
             }
         )
         Schema._update_schema()
@@ -41,21 +54,32 @@ class Schema:
         """
         Update the schema attribute with the latest additions.
         """
-        objecttypes_required = set()
-        for field_name, schema in cls._schemas.items():
-            serializer = schema.serializer_cls()
-            serializer_related_fields = [
-                field for field in serializer.fields if isinstance(field, RelatedField)
-            ]  # type: List[RelatedField]
-            for related_field in serializer_related_fields:
-                print(related_field)
+        objecttype_registry = {}  # type: Dict[Model, ModelSerializer]
+        # Create all of the ObjectTypes without any relations
+        for type_ in cls._types.values():
+            serializer = type_.serializer_cls()
+            gql_fields = {}
+            for field_name, field in serializer.fields.items():
+                gql_field = serializer_field_to_gql_field(field)
+                if gql_field is None:
+                    continue
+                gql_fields[field_name] = gql_field
+            objecttype_registry[type_.name] = GraphQLObjectType(type_.name, gql_fields)
+
+        # Now go through them all again, and add any relation fields using the
+        # objecttype registry.
+
+        # Create all top level ObjectTypes first, without any relation fields, add them to
+        # the type registry. Run through the schemas and fields again now that the type
+        # registry is populated, modifying the ObjectTypes in the registry to include the
+        # relation fields.
 
     # @classmethod
     # def as_schema(cls):
     #     return GraphQLSchema(GraphQLObjectType("Query", lambda: Schema.fields))
 
 
-class ModelSerializerSchema:
+class ModelSerializerType:
     """
     Turns a Django REST Framework Serializer into a GraphQL CRUD schema.
     """
@@ -69,11 +93,13 @@ class ModelSerializerSchema:
 
     def __init__(
         self,
+        name: str = None,
         lookup_fields: tuple = None,
         field: str = None,
         list_field: str = None,
         queryset: QuerySet = None,
     ):
+        self.name = name or self.__class__.__name__
         self.lookup_fields = lookup_fields if lookup_fields is not None else ("id",)
         self.field = field
         self.list_field = list_field
