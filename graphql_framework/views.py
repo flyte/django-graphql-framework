@@ -3,6 +3,7 @@ from importlib import import_module
 
 from django.conf import settings
 from django.http.response import (
+    HttpResponse,
     HttpResponseBadRequest,
     HttpResponseNotAllowed,
     JsonResponse,
@@ -11,11 +12,6 @@ from django.views.generic import TemplateView
 from graphql import GraphQLObjectType, GraphQLSchema, build_schema, graphql_sync
 
 from .schema import Schema
-
-
-class Root:
-    def human(self, info, id):
-        return dict(name="Chuck Norris")
 
 
 def graphql(request):
@@ -35,32 +31,40 @@ def graphql(request):
     return process_graphql_req(request)
 
 
-def process_graphql_req(request):
+def get_query_data_from_request(request):
     try:
         if request.method.lower() == "get":
             query = request.GET["query"]
-            variables = request.GET.get("variables")
-            qid = request.GET.get("id")
-            operation_name = request.GET.get("operationName")
-        elif request.method.lower() == "post":
-            query = request.POST["query"]
-            variables = request.POST.get("variables")
-            qid = request.POST.get("id")
-            operation_name = request.POST.get("operationName")
         else:
-            raise Exception("Cannot process GraphQL request that isn't a GET or POST")
+            query = request.POST["query"]
     except KeyError:
-        return HttpResponseBadRequest("Must include 'query' parameter")
+        return (
+            None,
+            None,
+            None,
+            None,
+            HttpResponseBadRequest("Must include 'query' parameter"),
+        )
+    variables = request.GET.get("variables", request.POST.get("variables"))
+    qid = request.GET.get("id", request.POST.get("id"))
+    operation_name = request.GET.get("operationName", request.POST.get("operationName"))
+    return query, variables, qid, operation_name, None
+
+
+def process_graphql_req(request):
+    query, variables, qid, operation_name, error = get_query_data_from_request(request)
+    if error is not None:
+        return error
     if variables is not None:
         variables = json.loads(variables)
-    schema = Schema.as_schema()
     result = graphql_sync(
-        schema, query, Root(), variable_values=variables, operation_name=operation_name
+        Schema.as_schema(),
+        query,
+        None,
+        variable_values=variables,
+        operation_name=operation_name,
     )
-    ret = dict(data=result.data, errors=[])
-    if result.errors:
-        for err in result.errors:
-            ret["errors"].append(err.formatted)
+    ret = dict(data=result.data, errors=[err.formatted for err in result.errors or []])
     if qid is not None:
         ret["id"] = qid
     return JsonResponse(ret)

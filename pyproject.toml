@@ -4,9 +4,12 @@ version = "0.1.0"
 description = ""
 authors = ["Ellis Percival <flyte@failcode.co.uk>"]
 license = "MIT"
+packages = [
+    { include = "graphql_framework" },
+]
 
 [tool.poetry.dependencies]
-python = "^3.6"
+python = "^3.7"
 graphql-core = ">=3"
 
 [tool.poetry.dev-dependencies]

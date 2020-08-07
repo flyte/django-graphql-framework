@@ -1,38 +1,33 @@
 from django.contrib.auth import get_user_model
-from rest_framework.fields import CharField, SerializerMethodField
-from rest_framework.serializers import ModelSerializer
 
-from graphql_framework.decorators import returns
-from graphql_framework.schema import Schema, SerializerSchema
+from graphql_framework.schema import ModelSerializerSchema, Schema
+
+from .models import UserAttribute
+from .serializers import UserAttributeSerializer, UserSerializer
 
 User = get_user_model()
 
 
-class UserSerializer(ModelSerializer):
-    full_name = SerializerMethodField(required=False)
-
-    class Meta:
-        model = User
-        fields = "__all__"
-
-    @returns(CharField)
-    def get_full_name(self, obj):
-        if not obj.first_name and not obj.last_name:
-            return None
-        if obj.first_name and not obj.last_name:
-            return obj.first_name
-        if not obj.first_name and obj.last_name:
-            return obj.last_name
-        return f"{obj.first_name} {obj.last_name}"
-
-
-
-class UserSchema(SerializerSchema, serializer_cls=UserSerializer, model=User):
-    # def get(self, id):
-    #     return User.objects.get(pk=id)
+class UserSchema(ModelSerializerSchema, serializer_cls=UserSerializer):
     pass
 
 
-class Query(Schema):
-    human = UserSchema.field_singular(lookup_fields=("id", "username", "email"))
-    # humans = HUMAN_SCHEMA.query_multiple
+class UserAttributeSchema(ModelSerializerSchema, serializer_cls=UserAttributeSerializer):
+    pass
+
+
+class MySchema(Schema):
+    # user = UserSchema.field_singular(lookup_fields=("id", "username", "email"))
+    # users = UserSchema.field_multiple
+
+    # user_attribute = UserAttributeSchema.field_singular()
+
+    user = UserSchema(
+        lookup_fields=("id", "username", "email"),  # For the singular field arguments
+        field="user",  # Otherwise will just use the field name we assigned it to. None to not use one.
+        list_field=None,  # Set to None to not use one
+    )
+
+    user_attribute = UserAttributeSchema(
+        lookup_fields=("id", "user__id"), list_field="user_attributes"
+    )
