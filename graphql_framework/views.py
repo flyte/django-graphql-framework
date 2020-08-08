@@ -8,13 +8,19 @@ from django.http.response import (
     HttpResponseNotAllowed,
     JsonResponse,
 )
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 from graphql import GraphQLObjectType, GraphQLSchema, build_schema, graphql_sync
 
 from .schema import Schema
 
 
+@csrf_exempt
 def graphql(request):
+    if request.method.lower() == "options":
+        resp = HttpResponse()
+        resp["Allow"] = "GET,POST,OPTIONS"
+        return resp
     if request.method.lower() not in ("get", "post"):
         return HttpResponseNotAllowed("This view only accepts GET or POST requests")
 
@@ -25,26 +31,30 @@ def graphql(request):
         content_type, request.META.get("HTTP_ACCEPT", "text/html").split(",")
     )
 
-    if "application/json" not in http_accept_types:
-        return GraphiQL.as_view()(request)
+    # if "application/json" not in http_accept_types:
+    #     return GraphiQL.as_view()(request)
 
     return process_graphql_req(request)
 
 
 def get_query_data_from_request(request):
-    try:
-        if request.method.lower() == "get":
-            query = request.GET["query"]
-        else:
+    def bad_req(reason):
+        return (None, None, None, None, HttpResponseBadRequest(reason))
+
+    if request.method.lower() == "post":
+        try:
             query = request.POST["query"]
-    except KeyError:
-        return (
-            None,
-            None,
-            None,
-            None,
-            HttpResponseBadRequest("Must include 'query' parameter"),
-        )
+        except KeyError:
+            try:
+                body_data = json.loads(request.body)
+                query = body_data["query"]
+            except (ValueError, KeyError):
+                return bad_req("Could not parse query from POST params or JSON body")
+    else:
+        try:
+            query = request.GET["query"]
+        except KeyError:
+            return bad_req("Must include 'query' parameter")
     variables = request.GET.get("variables", request.POST.get("variables"))
     qid = request.GET.get("id", request.POST.get("id"))
     operation_name = request.GET.get("operationName", request.POST.get("operationName"))
@@ -58,7 +68,7 @@ def process_graphql_req(request):
     if variables is not None:
         variables = json.loads(variables)
     result = graphql_sync(
-        Schema.as_schema(),
+        Schema.schema,
         query,
         None,
         variable_values=variables,

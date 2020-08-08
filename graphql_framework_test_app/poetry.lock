@@ -54,6 +54,17 @@ bcrypt = ["bcrypt"]
 
 [[package]]
 category = "main"
+description = "django-cors-headers is a Django application for handling the server headers required for Cross-Origin Resource Sharing (CORS)."
+name = "django-cors-headers"
+optional = false
+python-versions = ">=3.5"
+version = "3.4.0"
+
+[package.dependencies]
+Django = ">=2.0"
+
+[[package]]
+category = "main"
 description = ""
 develop = true
 name = "django-graphql-framework"
@@ -241,7 +252,7 @@ python-versions = "*"
 version = "1.12.1"
 
 [metadata]
-content-hash = "de70e36a8d99f715f7e0fb451f6308e36036b95642be8aac02884712f337dee9"
+content-hash = "f7b493e59f1c31b90811adda46eba914641a88d4acd7a5834945c90280496c15"
 lock-version = "1.0"
 python-versions = "^3.7"
 
@@ -261,6 +272,10 @@ colorama = [
 django = [
     {file = "Django-3.1-py3-none-any.whl", hash = "sha256:1a63f5bb6ff4d7c42f62a519edc2adbb37f9b78068a5a862beff858b68e3dc8b"},
     {file = "Django-3.1.tar.gz", hash = "sha256:2d390268a13c655c97e0e2ede9d117007996db692c1bb93eabebd4fb7ea7012b"},
+]
+django-cors-headers = [
+    {file = "django-cors-headers-3.4.0.tar.gz", hash = "sha256:f5218f2f0bb1210563ff87687afbf10786e080d8494a248e705507ebd92d7153"},
+    {file = "django_cors_headers-3.4.0-py3-none-any.whl", hash = "sha256:5240062ef0b16668ce8a5f43324c388d65f5439e1a30e22c38684d5ddaff0d15"},
 ]
 django-graphql-framework = []
 djangorestframework = [

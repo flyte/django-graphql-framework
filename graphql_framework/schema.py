@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from graphql import GraphQLArgument, GraphQLField, GraphQLObjectType, GraphQLSchema
+from graphql import (
+    GraphQLArgument,
+    GraphQLField,
+    GraphQLObjectType,
+    GraphQLSchema,
+    GraphQLList,
+)
 from graphql.type.scalars import GraphQLInt
 from rest_framework.relations import RelatedField
 
@@ -32,7 +38,7 @@ def serializer_field_to_gql_field(serializer_field: Type[SerializerField]):
 
 class Schema:
     _types = {}  # type: Dict[str, ModelSerializerType]
-    schema = None
+    schema = None  # type: GraphQLSchema
     objecttype_registry = {}  # type: Dict[str, GraphQLObjectType]
 
     def __init_subclass__(cls):
@@ -53,8 +59,13 @@ class Schema:
     def _update_schema(cls):
         """
         Update the schema attribute with the latest additions.
+
+        Create all top level ObjectTypes first, without any relation fields, add them to
+        the type registry. Run through the schemas and fields again now that the type
+        registry is populated, modifying the ObjectTypes in the registry to include the
+        relation fields.
         """
-        objecttype_registry = {}  # type: Dict[Model, ModelSerializer]
+        objecttype_registry = {}  # type: Dict[Model, GraphQLObjectType]
         # Create all of the ObjectTypes without any relations
         for type_ in cls._types.values():
             serializer = type_.serializer_cls()
@@ -64,15 +75,48 @@ class Schema:
                 if gql_field is None:
                     continue
                 gql_fields[field_name] = gql_field
-            objecttype_registry[type_.name] = GraphQLObjectType(type_.name, gql_fields)
+            objecttype_registry[type_.model] = GraphQLObjectType(type_.name, gql_fields)
 
         # Now go through them all again, and add any relation fields using the
         # objecttype registry.
+        for type_ in cls._types.values():
+            serializer = type_.serializer_cls()
+            obj_type = objecttype_registry[type_.model]
+            for field_name, field in serializer.fields.items():
+                if not isinstance(field, RelatedField):
+                    continue
+                obj_type.fields[field_name] = GraphQLField(
+                    objecttype_registry[field.queryset.model]
+                )
 
-        # Create all top level ObjectTypes first, without any relation fields, add them to
-        # the type registry. Run through the schemas and fields again now that the type
-        # registry is populated, modifying the ObjectTypes in the registry to include the
-        # relation fields.
+        # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:19:46
+        # Implement resolver functions
+
+        # Add the singular and list types
+        query = GraphQLObjectType("Query", {})
+        for toplevel_field_name, type_ in cls._types.items():
+            singular_field_name = (
+                None if type_.field is None else type_.field or toplevel_field_name
+            )
+            list_field_name = type_.list_field
+            if singular_field_name is not None:
+                # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:51:15
+                # Add resolver function
+                query.fields[singular_field_name] = GraphQLField(
+                    objecttype_registry[type_.model]
+                )
+            if list_field_name is not None:
+                # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:52:09
+                # Add resolver function
+                query.fields[list_field_name] = GraphQLField(
+                    GraphQLList(objecttype_registry[type_.model])
+                )
+
+        # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:58:04
+        # Add mutations
+
+        Schema.schema = GraphQLSchema(query)
+        print(Schema.schema)
 
     # @classmethod
     # def as_schema(cls):
@@ -95,7 +139,7 @@ class ModelSerializerType:
         self,
         name: str = None,
         lookup_fields: tuple = None,
-        field: str = None,
+        field: str = "",
         list_field: str = None,
         queryset: QuerySet = None,
     ):
