@@ -29,5 +29,9 @@ class MySchema(Schema):
     )
 
     user_attribute = UserAttributeType(
-        lookup_fields=("id", "user__id"), list_field="user_attributes"
+        lookup_fields=(
+            "id",
+            # "user__id"  # FIXME: This causes an issue because the serializer doesn't have a field called user__id.
+        ),
+        list_field="user_attributes",
     )

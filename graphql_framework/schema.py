@@ -95,21 +95,41 @@ class Schema:
         # Add the singular and list types
         query = GraphQLObjectType("Query", {})
         for toplevel_field_name, type_ in cls._types.items():
+            serializer = type_.serializer_cls()
             singular_field_name = (
                 None if type_.field is None else type_.field or toplevel_field_name
             )
             list_field_name = type_.list_field
             if singular_field_name is not None:
-                # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:51:15
-                # Add resolver function
+
+                def resolve_singular(root, info, type_=type_, **kwargs):
+                    return type_.queryset.get(**kwargs)
+
+                args_nullable = len(type_.lookup_fields) > 1
                 query.fields[singular_field_name] = GraphQLField(
-                    objecttype_registry[type_.model]
+                    objecttype_registry[type_.model],
+                    args={
+                        arg: GraphQLArgument(
+                            to_gql_type(serializer.fields[arg], nullable=args_nullable)
+                        )
+                        for arg in type_.lookup_fields
+                    },
+                    resolve=resolve_singular,
                 )
             if list_field_name is not None:
-                # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:52:09
-                # Add resolver function
+
+                def resolve_list(root, info, type_=type_, **kwargs):
+                    return type_.queryset.filter(**kwargs)
+
                 query.fields[list_field_name] = GraphQLField(
-                    GraphQLList(objecttype_registry[type_.model])
+                    GraphQLList(objecttype_registry[type_.model]),
+                    args={
+                        arg: GraphQLArgument(
+                            to_gql_type(serializer.fields[arg], nullable=True)
+                        )
+                        for arg in type_.lookup_fields
+                    },
+                    resolve=resolve_list,
                 )
 
         # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:58:04
