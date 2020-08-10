@@ -110,7 +110,7 @@ class Schema:
                     # Need to remove SerializerMethodFields from here, since they can't
                     # be used to look up on a queryset.
                     relation_field_type = relation_field.type
-                    # Remove the Null/NotNullable wrapper.
+                    # Remove the NotNullable wrapper.
                     # TODO: How does this affect list types?
                     try:
                         relation_field_type = relation_field_type.of_type
@@ -119,17 +119,14 @@ class Schema:
                     arg = GraphQLArgument(relation_field_type)
                     args[f"{field_name}__{relation_field_name}"] = arg
 
-            args_nullable = len(type_.lookup_fields) + len(args) > 1
-
             # Add all local fields too
-            args.update(
-                {
-                    arg: GraphQLArgument(
-                        to_gql_type(serializer.fields[arg], nullable=args_nullable)
+            for field_name in serializer.fields.keys():
+                try:
+                    args[field_name] = GraphQLArgument(
+                        to_gql_type(serializer.fields[field_name], nullable=True)
                     )
-                    for arg in type_.lookup_fields
-                }
-            )
+                except NotImplementedError:
+                    continue
 
             if singular_field_name is not None:
 
@@ -137,7 +134,11 @@ class Schema:
                     return type_.queryset.get(**kwargs)
 
                 query.fields[singular_field_name] = GraphQLField(
-                    objecttype_registry[type_.model], args=args, resolve=resolve_singular
+                    objecttype_registry[type_.model],
+                    args=args
+                    if type_.singular_lookup_fields is None
+                    else {k: args[k] for k in type_.singular_lookup_fields},
+                    resolve=resolve_singular,
                 )
             if list_field_name is not None:
 
@@ -146,7 +147,9 @@ class Schema:
 
                 query.fields[list_field_name] = GraphQLField(
                     GraphQLList(objecttype_registry[type_.model]),
-                    args=args,
+                    args=args
+                    if type_.list_lookup_fields is None
+                    else {k: args[k] for k in type_.list_lookup_fields},
                     resolve=resolve_list,
                 )
 
@@ -176,13 +179,15 @@ class ModelSerializerType:
     def __init__(
         self,
         name: str = None,
-        lookup_fields: tuple = None,
+        singular_lookup_fields: tuple = None,
+        list_lookup_fields: tuple = None,
         field: str = "",
         list_field: str = None,
         queryset: QuerySet = None,
     ):
         self.name = name or self.__class__.__name__
-        self.lookup_fields = lookup_fields if lookup_fields is not None else ("id",)
+        self.singular_lookup_fields = singular_lookup_fields
+        self.list_lookup_fields = list_lookup_fields
         self.field = field
         self.list_field = list_field
         self.queryset = queryset if queryset is not None else self.model.objects.all()

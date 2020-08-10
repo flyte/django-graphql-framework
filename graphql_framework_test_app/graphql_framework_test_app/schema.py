@@ -23,15 +23,13 @@ class MySchema(Schema):
     # user_attribute = UserAttributeSchema.field_singular()
 
     user = UserType(
-        lookup_fields=("id", "username", "email"),  # For the singular field arguments
+        singular_lookup_fields=("id", "first_name", "username", "email"),
         field="user",  # Otherwise will just use the field name we assigned it to. None to not use one.
         list_field=None,  # Set to None to not use one
     )
 
     user_attribute = UserAttributeType(
-        lookup_fields=(
-            "id",
-            # "user__id"  # FIXME: This causes an issue because the serializer doesn't have a field called user__id.
-        ),
+        singular_lookup_fields=("id", "user__email", "user__username"),
+        list_lookup_fields=None,  # None means all here
         list_field="user_attributes",
     )
