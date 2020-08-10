@@ -43,21 +43,24 @@ def get_query_data_from_request(request):
 
     if request.method.lower() == "post":
         try:
-            query = request.POST["query"]
+            body_data = json.loads(request.body)
+        except ValueError as exc:
+            return bad_req(str(exc))
+        try:
+            query = body_data["query"]
         except KeyError:
-            try:
-                body_data = json.loads(request.body)
-                query = body_data["query"]
-            except (ValueError, KeyError):
-                return bad_req("Could not parse query from POST params or JSON body")
+            return bad_req("Could not parse query from JSON body")
+        variables = body_data.get("variables")
+        operation_name = body_data.get("operationName")
+        qid = body_data.get("id")
     else:
         try:
             query = request.GET["query"]
         except KeyError:
             return bad_req("Must include 'query' parameter")
-    variables = request.GET.get("variables", request.POST.get("variables"))
-    qid = request.GET.get("id", request.POST.get("id"))
-    operation_name = request.GET.get("operationName", request.POST.get("operationName"))
+        variables = request.GET.get("variables")
+        operation_name = request.GET.get("operationName")
+        qid = request.GET.get("id")
     return query, variables, qid, operation_name, None
 
 
@@ -65,8 +68,6 @@ def process_graphql_req(request):
     query, variables, qid, operation_name, error = get_query_data_from_request(request)
     if error is not None:
         return error
-    if variables is not None:
-        variables = json.loads(variables)
     result = graphql_sync(
         Schema.schema,
         query,
