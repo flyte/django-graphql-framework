@@ -10,7 +10,7 @@ from graphql import (
     GraphQLSchema,
 )
 from rest_framework.fields import SerializerMethodField
-from rest_framework.relations import RelatedField
+from rest_framework.relations import RelatedField, ManyRelatedField
 
 from graphql_framework.fields import TypedSerializerMethodField
 
@@ -53,9 +53,6 @@ class Schema:
         )
         Schema._update_schema()
 
-    # IDEA: Possible implementations -@flyte at 07/08/2020, 12:52:52
-    # Recursive function to follow relations and create/add their ObjectTypes to the registry?
-
     @classmethod
     def _update_schema(cls):
         """
@@ -69,6 +66,7 @@ class Schema:
         # NOTE: Needs discussion or investigation -@flyte at 10/08/2020, 11:58:16
         # Currently this will only allow for one ModelSerializer per Model.
         # Is this an issue?
+
         objecttype_registry = {}  # type: Dict[Model, GraphQLObjectType]
         modelserializer_registry = {}  # type: Dict[Model, ModelSerializer]
         # Create all of the ObjectTypes without any relations
@@ -89,11 +87,21 @@ class Schema:
             serializer = type_.serializer_cls()
             obj_type = objecttype_registry[type_.model]
             for field_name, field in serializer.fields.items():
-                if not isinstance(field, RelatedField):
-                    continue
-                obj_type.fields[field_name] = GraphQLField(
-                    objecttype_registry[field.queryset.model]
-                )
+                if isinstance(field, RelatedField):
+                    obj_type.fields[field_name] = GraphQLField(
+                        objecttype_registry[field.queryset.model]
+                    )
+                elif isinstance(field, ManyRelatedField):
+
+                    def field_resolver(source, info, **kwargs):
+                        return getattr(source, info.field_name).all()
+
+                    obj_type.fields[field_name] = GraphQLField(
+                        GraphQLList(
+                            objecttype_registry[field.child_relation.queryset.model]
+                        ),
+                        resolve=field_resolver,
+                    )
 
         # Add the singular and list types
         query = GraphQLObjectType("Query", {})
@@ -127,6 +135,9 @@ class Schema:
                         relation_field_type = relation_field_type.of_type
                     except AttributeError:
                         pass
+                    # Skip reverse relation fields (from related_name)
+                    if isinstance(relation_field_type, GraphQLObjectType):
+                        continue
                     arg = GraphQLArgument(relation_field_type)
                     args[f"{field_name}__{relation_field_name}"] = arg
 
@@ -138,6 +149,9 @@ class Schema:
                     )
                 except NotImplementedError:
                     continue
+
+            # TODO: Tasks pending completion -@flyte at 10/08/2020, 15:40:26
+            # Add pagination args
 
             if singular_field_name is not None:
 
@@ -168,11 +182,6 @@ class Schema:
         # Add mutations
 
         Schema.schema = GraphQLSchema(query)
-        print(Schema.schema)
-
-    # @classmethod
-    # def as_schema(cls):
-    #     return GraphQLSchema(GraphQLObjectType("Query", lambda: Schema.fields))
 
 
 class ModelSerializerType:
@@ -202,58 +211,3 @@ class ModelSerializerType:
         self.field = field
         self.list_field = list_field
         self.queryset = queryset if queryset is not None else self.model.objects.all()
-
-    # @classmethod
-    # def get_singular(cls, root, info, **kwargs):
-    #     if cls.model is None:
-    #         raise NotImplementedError(
-    #             "Must provide either a model or get_singular() function"
-    #         )
-    #     if not kwargs:
-    #         raise ValueError(
-    #             "Must provide a way of looking up the object: %s"
-    #             % (cls.singular_lookup_fields,)
-    #         )
-    #     serializer = cls.serializer_cls(cls.model.objects.get(**kwargs))
-    #     return serializer.data
-
-    # @classmethod
-    # def field_singular(cls, lookup_fields=None):
-    #     cls.singular_lookup_fields = lookup_fields or ("id",)
-    #     object_type = Schema.type_registry.get(cls.serializer_cls.__name__)
-
-    #     if object_type is None:
-    #         # TODO: Tasks pending completion -@flyte at 06/08/2020, 17:24:09
-    #         # Put this in a separate function
-
-    #         # Create a new ObjectType and add it to the registry
-    #         serializer = cls.serializer_cls()
-    #         schema = dict()
-    #         for field_name, field in serializer.fields.items():
-    #             if isinstance(field, RelatedField):
-    #                 # Schema.type_registry.get(cls.)
-    #                 pass
-    #             nullable = None
-    #             if isinstance(field, TypedSerializerMethodField):
-    #                 nullable = not field.required
-    #                 field = field.field_type()
-    #             try:
-    #                 gql_type = to_gql_type(field, nullable=nullable)
-    #             except NotImplementedError:
-    #                 continue
-    #             schema[field_name] = GraphQLField(gql_type)
-    #         # Only set the args as required if there's only one
-    #         args_nullable = len(cls.singular_lookup_fields) > 1
-    #         object_type = GraphQLObjectType(cls.serializer_cls.__name__, lambda: schema)
-    #         Schema.type_registry[cls.serializer_cls.__name__] = object_type
-
-    #     return GraphQLField(
-    #         object_type,
-    #         args={
-    #             arg: GraphQLArgument(
-    #                 to_gql_type(serializer.fields[arg], nullable=args_nullable)
-    #             )
-    #             for arg in cls.singular_lookup_fields
-    #         },
-    #         resolve=cls.get_singular,
-    #     )

@@ -14,7 +14,8 @@ class UserSerializer(ModelSerializer):
 
     class Meta:
         model = User
-        fields = "__all__"
+        # fields = "__all__"
+        fields = ["id", "username", "email", "first_name", "attributes", "full_name"]
 
     def get_full_name(self, obj):
         if not obj.first_name and not obj.last_name:
