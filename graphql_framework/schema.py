@@ -5,11 +5,12 @@ from typing import TYPE_CHECKING
 from graphql import (
     GraphQLArgument,
     GraphQLField,
+    GraphQLList,
     GraphQLObjectType,
     GraphQLSchema,
-    GraphQLList,
 )
 from graphql.type.scalars import GraphQLInt
+from rest_framework.fields import SerializerMethodField
 from rest_framework.relations import RelatedField
 
 from graphql_framework.fields import TypedSerializerMethodField
@@ -65,7 +66,11 @@ class Schema:
         registry is populated, modifying the ObjectTypes in the registry to include the
         relation fields.
         """
+        # NOTE: Needs discussion or investigation -@flyte at 10/08/2020, 11:58:16
+        # Currently this will only allow for one ModelSerializer per Model.
+        # Is this an issue?
         objecttype_registry = {}  # type: Dict[Model, GraphQLObjectType]
+        modelserializer_registry = {}  # type: Dict[Model, ModelSerializer]
         # Create all of the ObjectTypes without any relations
         for type_ in cls._types.values():
             serializer = type_.serializer_cls()
@@ -76,6 +81,7 @@ class Schema:
                     continue
                 gql_fields[field_name] = gql_field
             objecttype_registry[type_.model] = GraphQLObjectType(type_.name, gql_fields)
+            modelserializer_registry[type_.model] = type_
 
         # Now go through them all again, and add any relation fields using the
         # objecttype registry.
@@ -106,9 +112,14 @@ class Schema:
                 for relation_field_name, relation_field in objecttype_registry[
                     field.queryset.model
                 ].fields.items():
-                    # FIXME: Needing refactor or cleanup -@flyte at 10/08/2020, 10:59:21
-                    # Need to remove SerializerMethodFields from here, since they can't
-                    # be used to look up on a queryset.
+                    # Don't add a lookup arg for SerializerMethodFields
+                    if isinstance(
+                        modelserializer_registry[field.queryset.model]
+                        .serializer_cls()
+                        .fields[relation_field_name],
+                        SerializerMethodField,
+                    ):
+                        continue
                     relation_field_type = relation_field.type
                     # Remove the NotNullable wrapper.
                     # TODO: How does this affect list types?
