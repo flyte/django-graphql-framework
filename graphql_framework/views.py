@@ -31,8 +31,8 @@ def graphql(request):
         content_type, request.META.get("HTTP_ACCEPT", "text/html").split(",")
     )
 
-    # if "application/json" not in http_accept_types:
-    #     return GraphiQL.as_view()(request)
+    if "application/json" not in http_accept_types:
+        return GraphiQL.as_view()(request)
 
     return process_graphql_req(request)
 
@@ -82,3 +82,8 @@ def process_graphql_req(request):
 
 class GraphiQL(TemplateView):
     template_name = "graphql_framework/graphiql.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["api_url"] = settings.GRAPHQL_FRAMEWORK.get("api_url", "/graphql/")
+        return context

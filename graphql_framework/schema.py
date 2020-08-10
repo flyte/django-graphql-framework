@@ -9,7 +9,6 @@ from graphql import (
     GraphQLObjectType,
     GraphQLSchema,
 )
-from graphql.type.scalars import GraphQLInt
 from rest_framework.fields import SerializerMethodField
 from rest_framework.relations import RelatedField
 
@@ -18,6 +17,7 @@ from graphql_framework.fields import TypedSerializerMethodField
 from .converter import to_gql_type
 
 if TYPE_CHECKING:
+    # pylint: disable=ungrouped-imports
     from typing import Dict, Type
     from rest_framework.serializers import ModelSerializer
     from rest_framework.fields import Field as SerializerField

@@ -115,6 +115,6 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 
-GRAPHQL_FRAMEWORK = dict(schema="graphql_framework_test_app.schema")
+GRAPHQL_FRAMEWORK = dict(schema="graphql_framework_test_app.schema", api_url="/graphql/")
 
 CORS_ORIGIN_ALLOW_ALL = True
