@@ -89,9 +89,6 @@ class Schema:
                     objecttype_registry[field.queryset.model]
                 )
 
-        # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:19:46
-        # Implement resolver functions
-
         # Add the singular and list types
         query = GraphQLObjectType("Query", {})
         for toplevel_field_name, type_ in cls._types.items():
@@ -100,21 +97,47 @@ class Schema:
                 None if type_.field is None else type_.field or toplevel_field_name
             )
             list_field_name = type_.list_field
+
+            # Add args to look up objects across relations
+            args = {}
+            for field_name, field in serializer.fields.items():
+                if not isinstance(field, RelatedField):
+                    continue
+                for relation_field_name, relation_field in objecttype_registry[
+                    field.queryset.model
+                ].fields.items():
+                    # FIXME: Needing refactor or cleanup -@flyte at 10/08/2020, 10:59:21
+                    # Need to remove SerializerMethodFields from here, since they can't
+                    # be used to look up on a queryset.
+                    relation_field_type = relation_field.type
+                    # Remove the Null/NotNullable wrapper.
+                    # TODO: How does this affect list types?
+                    try:
+                        relation_field_type = relation_field_type.of_type
+                    except AttributeError:
+                        pass
+                    arg = GraphQLArgument(relation_field_type)
+                    args[f"{field_name}__{relation_field_name}"] = arg
+
+            args_nullable = len(type_.lookup_fields) + len(args) > 1
+
+            # Add all local fields too
+            args.update(
+                {
+                    arg: GraphQLArgument(
+                        to_gql_type(serializer.fields[arg], nullable=args_nullable)
+                    )
+                    for arg in type_.lookup_fields
+                }
+            )
+
             if singular_field_name is not None:
 
                 def resolve_singular(root, info, type_=type_, **kwargs):
                     return type_.queryset.get(**kwargs)
 
-                args_nullable = len(type_.lookup_fields) > 1
                 query.fields[singular_field_name] = GraphQLField(
-                    objecttype_registry[type_.model],
-                    args={
-                        arg: GraphQLArgument(
-                            to_gql_type(serializer.fields[arg], nullable=args_nullable)
-                        )
-                        for arg in type_.lookup_fields
-                    },
-                    resolve=resolve_singular,
+                    objecttype_registry[type_.model], args=args, resolve=resolve_singular
                 )
             if list_field_name is not None:
 
@@ -123,12 +146,7 @@ class Schema:
 
                 query.fields[list_field_name] = GraphQLField(
                     GraphQLList(objecttype_registry[type_.model]),
-                    args={
-                        arg: GraphQLArgument(
-                            to_gql_type(serializer.fields[arg], nullable=True)
-                        )
-                        for arg in type_.lookup_fields
-                    },
+                    args=args,
                     resolve=resolve_list,
                 )
 
