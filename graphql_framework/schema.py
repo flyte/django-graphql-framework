@@ -2,15 +2,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import models
 from graphql import (
     GraphQLArgument,
     GraphQLField,
+    GraphQLInt,
     GraphQLList,
+    GraphQLNonNull,
     GraphQLObjectType,
     GraphQLSchema,
 )
 from rest_framework.fields import SerializerMethodField
-from rest_framework.relations import RelatedField, ManyRelatedField
+from rest_framework.relations import (
+    ManyRelatedField,
+    PrimaryKeyRelatedField,
+    RelatedField,
+)
 
 from graphql_framework.fields import TypedSerializerMethodField
 
@@ -180,6 +187,30 @@ class Schema:
 
         # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:58:04
         # Add mutations
+        for toplevel_field_name, type_ in cls._types.items():
+            serializer = type_.serializer_cls()
+            # TODO: Tasks pending completion -@flyte at 11/08/2020, 12:11:23
+            # Get the name of the input object
+            create_object_type = GraphQLObjectType("TODOCreateInput", {})
+            for field_name, field in serializer.fields.items():
+                if field.read_only or isinstance(field, ManyRelatedField):
+                    continue
+                gql_type = None
+                if isinstance(field, RelatedField):
+                    if isinstance(field, PrimaryKeyRelatedField):
+                        # TODO: Tasks pending completion -@flyte at 11/08/2020, 17:53:41
+                        # Make a module to convert Django types to GraphQL ones
+                        model_pk_type = field.queryset.model._meta.pk
+                        if isinstance(model_pk_type, models.AutoField):
+                            gql_type = GraphQLNonNull(GraphQLInt)
+                    # TODO: Tasks pending completion -@flyte at 11/08/2020, 17:55:19
+                    # Set gql_type for other field types as well
+                if gql_type is None:
+                    try:
+                        gql_type = to_gql_type(field, nullable=not field.required)
+                    except NotImplementedError:
+                        continue
+                create_object_type.fields[field_name] = gql_type
 
         Schema.schema = GraphQLSchema(query)
 
