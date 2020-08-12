@@ -21,7 +21,11 @@ from rest_framework.relations import (
     RelatedField,
 )
 
-from graphql_framework.fields import TypedSerializerMethodField
+from graphql_framework.fields import (
+    ModelMethodField,
+    ModelPropertyField,
+    TypedSerializerMethodField,
+)
 
 from .converter import to_gql_type
 
@@ -36,7 +40,10 @@ if TYPE_CHECKING:
 
 def serializer_field_to_gql_field(serializer_field: Type[SerializerField], **kwargs):
     nullable = None
-    if isinstance(serializer_field, TypedSerializerMethodField):
+    if isinstance(
+        serializer_field,
+        (TypedSerializerMethodField, ModelPropertyField, ModelMethodField),
+    ):
         nullable = not serializer_field.required
         serializer_field = serializer_field.field_type()
     try:
@@ -90,6 +97,19 @@ class Schema:
                         return getattr(type_.serializer_cls(source), field.method_name)(
                             source
                         )
+
+                    field_kwargs["resolve"] = resolve_field
+                elif isinstance(field, ModelPropertyField):
+
+                    def resolve_field(source, info, field=field, **kwargs):
+                        return getattr(source, field.property_name)
+
+                    field_kwargs["resolve"] = resolve_field
+                elif isinstance(field, ModelMethodField):
+
+                    def resolve_field(source, info, field=field, **kwargs):
+                        func = getattr(source, field.method_name)
+                        return func(*field.method_args, **field.method_kwargs)
 
                     field_kwargs["resolve"] = resolve_field
                 gql_field = serializer_field_to_gql_field(field, **field_kwargs)

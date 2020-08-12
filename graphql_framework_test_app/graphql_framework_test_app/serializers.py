@@ -1,8 +1,12 @@
 from django.contrib.auth import get_user_model
-from rest_framework.fields import CharField
+from rest_framework.fields import CharField, FloatField
 from rest_framework.serializers import ModelSerializer
 
-from graphql_framework.fields import TypedSerializerMethodField
+from graphql_framework.fields import (
+    ModelMethodField,
+    ModelPropertyField,
+    TypedSerializerMethodField,
+)
 
 from .models import UserAttribute
 
@@ -28,9 +32,9 @@ class UserSerializer(ModelSerializer):
 
 
 class UserAttributeSerializer(ModelSerializer):
-
-    # TODO: Tasks pending completion -@flyte at 12/08/2020, 15:29:04
-    # How to access properties/functions on model via GraphQL?
+    name_and_height = ModelPropertyField(CharField, "name_and_height")
+    double_height = ModelMethodField(FloatField, "get_height_with_mult", method_args=(2,))
+    triple_height = ModelMethodField(FloatField, "get_height_with_mult", method_args=(3,))
 
     class Meta:
         model = UserAttribute
