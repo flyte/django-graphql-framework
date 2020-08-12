@@ -6,6 +6,8 @@ from django.db import models
 from graphql import (
     GraphQLArgument,
     GraphQLField,
+    GraphQLInputField,
+    GraphQLInputObjectType,
     GraphQLInt,
     GraphQLList,
     GraphQLNonNull,
@@ -185,13 +187,14 @@ class Schema:
                     resolve=resolve_list,
                 )
 
-        # TODO: Tasks pending completion -@flyte at 08/08/2020, 08:58:04
-        # Add mutations
+        mutation = GraphQLObjectType("Mutation", {})
         for toplevel_field_name, type_ in cls._types.items():
+            if not type_.create_mutation and not type_.update_mutation:
+                continue
             serializer = type_.serializer_cls()
             # TODO: Tasks pending completion -@flyte at 11/08/2020, 12:11:23
             # Get the name of the input object
-            create_object_type = GraphQLObjectType("TODOCreateInput", {})
+            create_object_type = GraphQLInputObjectType(f"Create{type_.name}", {})
             for field_name, field in serializer.fields.items():
                 if field.read_only or isinstance(field, ManyRelatedField):
                     continue
@@ -210,9 +213,66 @@ class Schema:
                         gql_type = to_gql_type(field, nullable=not field.required)
                     except NotImplementedError:
                         continue
-                create_object_type.fields[field_name] = gql_type
+                create_object_type.fields[field_name] = GraphQLInputField(gql_type)
 
-        Schema.schema = GraphQLSchema(query)
+            def resolve_create(
+                root, info, type_=type_, data_name=toplevel_field_name, **kwargs
+            ):
+                data = kwargs[data_name]
+                serializer = type_.serializer_cls(data=data)
+                if not serializer.is_valid():
+                    raise ValueError(serializer.errors)
+                return serializer.save()
+
+            if type_.create_mutation:
+                mutation.fields[f"create_{toplevel_field_name}"] = GraphQLField(
+                    objecttype_registry[type_.model],
+                    args={
+                        toplevel_field_name: GraphQLArgument(
+                            GraphQLNonNull(create_object_type)
+                        )
+                    },
+                    resolve=resolve_create,
+                )
+            if not type_.update_mutation:
+                continue
+
+            update_object_type = GraphQLInputObjectType(
+                f"Update{type_.name}", create_object_type.fields.copy()
+            )
+            # Remove all NonNulls
+            for field_name, field in update_object_type.fields.items():
+                if isinstance(field.type, GraphQLNonNull):
+                    field.type = field.type.of_type
+
+            def resolve_update(
+                root, info, type_=type_, data_name=toplevel_field_name, **kwargs
+            ):
+                pk = kwargs[type_.model._meta.pk.name]
+                data = kwargs[data_name]
+                serializer = type_.serializer_cls(
+                    type_.model.objects.get(pk=pk), data, partial=True
+                )
+                if not serializer.is_valid():
+                    raise ValueError(serializer.errors)
+                return serializer.save()
+
+            # TODO: Tasks pending completion -@flyte at 12/08/2020, 12:17:05
+            # Remove hardcoded Int for primary key and work out the right field type
+            mutation.fields[f"update_{toplevel_field_name}"] = GraphQLField(
+                objecttype_registry[type_.model],
+                args={
+                    type_.model._meta.pk.name: GraphQLArgument(
+                        GraphQLNonNull(GraphQLInt)
+                    ),
+                    toplevel_field_name: GraphQLArgument(
+                        GraphQLNonNull(update_object_type)
+                    ),
+                },
+                resolve=resolve_update,
+            )
+
+        Schema.schema = GraphQLSchema(query, mutation)
 
 
 class ModelSerializerType:
@@ -235,6 +295,8 @@ class ModelSerializerType:
         field: str = "",
         list_field: str = None,
         queryset: QuerySet = None,
+        create_mutation: bool = False,
+        update_mutation: bool = False,
     ):
         self.name = name or self.__class__.__name__
         self.singular_lookup_fields = singular_lookup_fields
@@ -242,3 +304,5 @@ class ModelSerializerType:
         self.field = field
         self.list_field = list_field
         self.queryset = queryset if queryset is not None else self.model.objects.all()
+        self.create_mutation = create_mutation
+        self.update_mutation = update_mutation

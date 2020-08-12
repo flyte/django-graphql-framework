@@ -26,10 +26,14 @@ class MySchema(Schema):
         singular_lookup_fields=("id", "first_name", "username", "email"),
         field="user",  # Otherwise will just use the field name we assigned it to. None to not use one.
         list_field=None,  # Set to None to not use one
+        create_mutation=False,
+        update_mutation=True,
     )
 
     user_attribute = UserAttributeType(
         singular_lookup_fields=("id", "user__email", "user__username"),
         list_lookup_fields=None,  # None means all here
         list_field="user_attributes",
+        create_mutation=True,
+        update_mutation=True,
     )
