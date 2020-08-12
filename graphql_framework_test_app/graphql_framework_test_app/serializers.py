@@ -14,8 +14,8 @@ class UserSerializer(ModelSerializer):
 
     class Meta:
         model = User
-        # fields = "__all__"
-        fields = ["id", "username", "email", "first_name", "attributes", "full_name"]
+        fields = "__all__"
+        # fields = ["id", "username", "email", "first_name", "attributes", "full_name"]
 
     def get_full_name(self, obj):
         if not obj.first_name and not obj.last_name:
@@ -28,6 +28,10 @@ class UserSerializer(ModelSerializer):
 
 
 class UserAttributeSerializer(ModelSerializer):
+
+    # TODO: Tasks pending completion -@flyte at 12/08/2020, 15:29:04
+    # How to access properties/functions on model via GraphQL?
+
     class Meta:
         model = UserAttribute
         fields = "__all__"
