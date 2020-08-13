@@ -56,7 +56,8 @@ def serializer_field_to_gql_field(serializer_field: Type[SerializerField], **kwa
 class Schema:
     _types = {}  # type: Dict[str, ModelSerializerType]
     schema = None  # type: GraphQLSchema
-    objecttype_registry = {}  # type: Dict[str, GraphQLObjectType]
+    objecttype_registry = {}  # type: Dict[Model, GraphQLObjectType]
+    modelserializer_registry = {}  # type: Dict[Model, ModelSerializer]
 
     def __init_subclass__(cls):
         # See what fields were added and add those to our schema
@@ -70,6 +71,50 @@ class Schema:
         Schema._update_schema()
 
     @classmethod
+    def register_type(cls, type_):
+        serializer = type_.serializer_cls()
+        gql_fields = {}
+        for field_name, field in serializer.fields.items():
+            field_kwargs = {}
+            if isinstance(field, TypedSerializerMethodField):
+
+                def resolve_field(source, info, type_=type_, field=field, **kwargs):
+                    return getattr(type_.serializer_cls(source), field.method_name)(
+                        source
+                    )
+
+                field_kwargs["resolve"] = resolve_field
+            elif isinstance(field, ModelPropertyField):
+
+                def resolve_field(source, info, field=field, **kwargs):
+                    return getattr(source, field.property_name)
+
+                field_kwargs["resolve"] = resolve_field
+            elif isinstance(field, ModelMethodField):
+
+                def resolve_field(source, info, field=field, **kwargs):
+                    func = getattr(source, field.method_name)
+                    return func(*field.method_args, **field.method_kwargs)
+
+                field_kwargs["resolve"] = resolve_field
+            gql_field = serializer_field_to_gql_field(field, **field_kwargs)
+            if gql_field is None:
+                continue
+            gql_fields[field_name] = gql_field
+        cls.objecttype_registry[type_.model] = GraphQLObjectType(type_.name, gql_fields)
+        cls.modelserializer_registry[type_.model] = type_
+
+    @classmethod
+    def _update_registry(cls):
+        # NOTE: Needs discussion or investigation -@flyte at 10/08/2020, 11:58:16
+        # Currently this will only allow for one ModelSerializer per Model.
+        # Is this an issue?
+
+        # Create all of the ObjectTypes without any relations
+        for type_ in cls._types.values():
+            cls.register_type(type_)
+
+    @classmethod
     def _update_schema(cls):
         """
         Update the schema attribute with the latest additions.
@@ -79,65 +124,33 @@ class Schema:
         registry is populated, modifying the ObjectTypes in the registry to include the
         relation fields.
         """
-        # NOTE: Needs discussion or investigation -@flyte at 10/08/2020, 11:58:16
-        # Currently this will only allow for one ModelSerializer per Model.
-        # Is this an issue?
-
-        objecttype_registry = {}  # type: Dict[Model, GraphQLObjectType]
-        modelserializer_registry = {}  # type: Dict[Model, ModelSerializer]
-        # Create all of the ObjectTypes without any relations
-        for type_ in cls._types.values():
-            serializer = type_.serializer_cls()
-            gql_fields = {}
-            for field_name, field in serializer.fields.items():
-                field_kwargs = {}
-                if isinstance(field, TypedSerializerMethodField):
-
-                    def resolve_field(source, info, type_=type_, field=field, **kwargs):
-                        return getattr(type_.serializer_cls(source), field.method_name)(
-                            source
-                        )
-
-                    field_kwargs["resolve"] = resolve_field
-                elif isinstance(field, ModelPropertyField):
-
-                    def resolve_field(source, info, field=field, **kwargs):
-                        return getattr(source, field.property_name)
-
-                    field_kwargs["resolve"] = resolve_field
-                elif isinstance(field, ModelMethodField):
-
-                    def resolve_field(source, info, field=field, **kwargs):
-                        func = getattr(source, field.method_name)
-                        return func(*field.method_args, **field.method_kwargs)
-
-                    field_kwargs["resolve"] = resolve_field
-                gql_field = serializer_field_to_gql_field(field, **field_kwargs)
-                if gql_field is None:
-                    continue
-                gql_fields[field_name] = gql_field
-            objecttype_registry[type_.model] = GraphQLObjectType(type_.name, gql_fields)
-            modelserializer_registry[type_.model] = type_
-
         # Now go through them all again, and add any relation fields using the
         # objecttype registry.
         for type_ in cls._types.values():
             serializer = type_.serializer_cls()
-            obj_type = objecttype_registry[type_.model]
+            obj_type = cls.objecttype_registry[type_.model]
             for field_name, field in serializer.fields.items():
-                if isinstance(field, RelatedField):
+                if (
+                    isinstance(field, RelatedField)
+                    and field.queryset.model in cls.objecttype_registry
+                ):
                     obj_type.fields[field_name] = GraphQLField(
-                        objecttype_registry[field.queryset.model]
+                        cls.objecttype_registry[field.queryset.model]
                     )
-                elif isinstance(field, ManyRelatedField):
+                elif (
+                    isinstance(field, ManyRelatedField)
+                    and field.child_relation.queryset.model in cls.objecttype_registry
+                ):
 
                     def field_resolver(source, info, **kwargs):
                         return getattr(source, info.field_name).all()
 
-                    if field.child_relation.queryset.model in objecttype_registry:
+                    if field.child_relation.queryset.model in cls.objecttype_registry:
                         obj_type.fields[field_name] = GraphQLField(
                             GraphQLList(
-                                objecttype_registry[field.child_relation.queryset.model]
+                                cls.objecttype_registry[
+                                    field.child_relation.queryset.model
+                                ]
                             ),
                             resolve=field_resolver,
                         )
@@ -154,14 +167,17 @@ class Schema:
             # Add args to look up objects across relations
             args = {}
             for field_name, field in serializer.fields.items():
-                if not isinstance(field, RelatedField):
+                if (
+                    not isinstance(field, RelatedField)
+                    or field.queryset.model not in cls.objecttype_registry
+                ):
                     continue
-                for relation_field_name, relation_field in objecttype_registry[
+                for relation_field_name, relation_field in cls.objecttype_registry[
                     field.queryset.model
                 ].fields.items():
                     # Don't add a lookup arg for SerializerMethodFields
                     if isinstance(
-                        modelserializer_registry[field.queryset.model]
+                        cls.modelserializer_registry[field.queryset.model]
                         .serializer_cls()
                         .fields[relation_field_name],
                         SerializerMethodField,
@@ -198,7 +214,7 @@ class Schema:
                     return type_.queryset.get(**kwargs)
 
                 query.fields[singular_field_name] = GraphQLField(
-                    objecttype_registry[type_.model],
+                    cls.objecttype_registry[type_.model],
                     args=args
                     if type_.singular_lookup_fields is None
                     else {k: args[k] for k in type_.singular_lookup_fields},
@@ -210,7 +226,7 @@ class Schema:
                     return type_.queryset.filter(**kwargs)
 
                 query.fields[list_field_name] = GraphQLField(
-                    GraphQLList(objecttype_registry[type_.model]),
+                    GraphQLList(cls.objecttype_registry[type_.model]),
                     args=args
                     if type_.list_lookup_fields is None
                     else {k: args[k] for k in type_.list_lookup_fields},
@@ -259,7 +275,7 @@ class Schema:
 
             if type_.create_mutation:
                 mutation.fields[f"create_{toplevel_field_name}"] = GraphQLField(
-                    objecttype_registry[type_.model],
+                    cls.objecttype_registry[type_.model],
                     args={
                         toplevel_field_name: GraphQLArgument(
                             GraphQLNonNull(create_object_type)
@@ -293,7 +309,7 @@ class Schema:
             # TODO: Tasks pending completion -@flyte at 12/08/2020, 12:17:05
             # Remove hardcoded Int for primary key and work out the right field type
             mutation.fields[f"update_{toplevel_field_name}"] = GraphQLField(
-                objecttype_registry[type_.model],
+                cls.objecttype_registry[type_.model],
                 args={
                     type_.model._meta.pk.name: GraphQLArgument(
                         GraphQLNonNull(GraphQLInt)
@@ -339,3 +355,4 @@ class ModelSerializerType:
         self.queryset = queryset if queryset is not None else self.model.objects.all()
         self.create_mutation = create_mutation
         self.update_mutation = update_mutation
+        Schema.register_type(self)
