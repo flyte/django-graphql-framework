@@ -71,32 +71,35 @@ class Schema:
         Schema._update_schema()
 
     @classmethod
-    def register_type(cls, type_):
+    def register_type(cls, type_: "ModelSerializerType"):
+        """
+        Register an ModelSerializerType in the schema registry for the model it's based on.
+        """
         serializer = type_.serializer_cls()
         gql_fields = {}
         for field_name, field in serializer.fields.items():
             field_kwargs = {}
             if isinstance(field, TypedSerializerMethodField):
 
-                def resolve_field(source, info, type_=type_, field=field, **kwargs):
+                def resolve_tsm_field(source, info, type_=type_, field=field, **kwargs):
                     return getattr(type_.serializer_cls(source), field.method_name)(
                         source
                     )
 
-                field_kwargs["resolve"] = resolve_field
+                field_kwargs["resolve"] = resolve_tsm_field
             elif isinstance(field, ModelPropertyField):
 
-                def resolve_field(source, info, field=field, **kwargs):
+                def resolve_mp_field(source, info, type_=type_, field=field, **kwargs):
                     return getattr(source, field.property_name)
 
-                field_kwargs["resolve"] = resolve_field
+                field_kwargs["resolve"] = resolve_mp_field
             elif isinstance(field, ModelMethodField):
 
-                def resolve_field(source, info, field=field, **kwargs):
+                def resolve_mm_field(source, info, type_=type_, field=field, **kwargs):
                     func = getattr(source, field.method_name)
                     return func(*field.method_args, **field.method_kwargs)
 
-                field_kwargs["resolve"] = resolve_field
+                field_kwargs["resolve"] = resolve_mm_field
             gql_field = serializer_field_to_gql_field(field, **field_kwargs)
             if gql_field is None:
                 continue
@@ -124,8 +127,11 @@ class Schema:
         registry is populated, modifying the ObjectTypes in the registry to include the
         relation fields.
         """
-        # Now go through them all again, and add any relation fields using the
-        # objecttype registry.
+        # TODO: Tasks pending completion -@flyte at 18/08/2020, 10:39:19
+        # Add any enums for choice fields
+
+        # Go through each of the types in the registry and add any relation
+        # fields using the existing entries.
         for type_ in cls._types.values():
             serializer = type_.serializer_cls()
             obj_type = cls.objecttype_registry[type_.model]
@@ -155,8 +161,10 @@ class Schema:
                             resolve=field_resolver,
                         )
 
-        # Add the singular and list types
+        # Create a blank query schema
         query = GraphQLObjectType("Query", {})
+
+        # Add the singular and list types to the schema
         for toplevel_field_name, type_ in cls._types.items():
             serializer = type_.serializer_cls()
             singular_field_name = (

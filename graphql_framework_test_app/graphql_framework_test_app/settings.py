@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "graphql_framework",
     "graphql_framework_test_app",
+    "behave_django",
 ]
 
 MIDDLEWARE = [
