@@ -28,12 +28,20 @@ def step(context, model_name):
 def step_impl(context, model_name, gql_field_type):
     model = context.data["models"][model_name]
     object_type = Schema.objecttype_registry[model]
-    model_field = getattr(model, "test_field").field
     gql_field = object_type.fields["test_field"]
+    try:
+        model_field = getattr(model, "test_field").field
+    except AttributeError:
+        # This could just be a TypedModelSerializerMethodField, which only exists
+        # on the serializer itself.
+        serializer = context.data["serializers"][model_name]()
+        nullable = serializer.fields["test_field"].field_type().allow_blank
+    else:
+        nullable = model_field.null
     desired_gql_type = type(getattr(graphql, gql_field_type))
     assert isinstance(gql_field, GraphQLField)
-    if model_field.null:
-        assert isinstance(gql_field.type, GraphQLNonNull)
+    if nullable:
         assert isinstance(gql_field.type.of_type, desired_gql_type)
     else:
+        assert isinstance(gql_field.type, GraphQLNonNull)
         assert isinstance(gql_field.type.of_type, desired_gql_type)

@@ -23,6 +23,16 @@
       "django": true,
       "cwd": "${workspaceFolder}/graphql_framework_test_app",
       "justMyCode": true
+    },
+    {
+      "name": "Python: WIP Tests",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/graphql_framework_test_app/manage.py",
+      "args": ["behave", "--wip"],
+      "django": true,
+      "cwd": "${workspaceFolder}/graphql_framework_test_app",
+      "justMyCode": true
     }
   ]
 }
