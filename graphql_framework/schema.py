@@ -56,8 +56,8 @@ def serializer_field_to_gql_field(serializer_field: Type[SerializerField], **kwa
 class Schema:
     _types = {}  # type: Dict[str, ModelSerializerType]
     schema = None  # type: GraphQLSchema
-    objecttype_registry = {}  # type: Dict[Model, GraphQLObjectType]
-    modelserializer_registry = {}  # type: Dict[Model, ModelSerializer]
+    objecttype_registry = {}  # type: Dict[Type[Model], GraphQLObjectType]
+    modelserializer_registry = {}  # type: Dict[Type[Model], ModelSerializer]
 
     def __init_subclass__(cls):
         # See what fields were added and add those to our schema

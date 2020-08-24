@@ -7,19 +7,20 @@ from graphql_framework.fields import (
     ModelPropertyField,
     TypedSerializerMethodField,
 )
+from graphql_framework.mixins import ModelSerializerExtraFieldsMixin
 
 from .models import UserAttribute
 
 User = get_user_model()
 
 
-class UserSerializer(ModelSerializer):
+class UserSerializer(ModelSerializerExtraFieldsMixin, ModelSerializer):
     full_name = TypedSerializerMethodField(CharField, required=False)
 
     class Meta:
         model = User
         fields = "__all__"
-        # fields = ["id", "username", "email", "first_name", "attributes", "full_name"]
+        extra_fields = ["attributes"]
 
     def get_full_name(self, obj):
         if not obj.first_name and not obj.last_name:
