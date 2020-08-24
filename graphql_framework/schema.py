@@ -38,6 +38,14 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
 
+class classproperty(object):
+    def __init__(self, f):
+        self.f = f
+
+    def __get__(self, obj, owner):
+        return self.f(owner)
+
+
 def serializer_field_to_gql_field(serializer_field: Type[SerializerField], **kwargs):
     nullable = None
     if isinstance(
@@ -55,20 +63,26 @@ def serializer_field_to_gql_field(serializer_field: Type[SerializerField], **kwa
 
 class Schema:
     _types = {}  # type: Dict[str, ModelSerializerType]
-    schema = None  # type: GraphQLSchema
+    _schema = None  # type: GraphQLSchema
     objecttype_registry = {}  # type: Dict[Type[Model], GraphQLObjectType]
     modelserializer_registry = {}  # type: Dict[Type[Model], ModelSerializer]
 
     def __init_subclass__(cls):
         # See what fields were added and add those to our schema
-        Schema._types.update(
+        cls._types.update(
             {
                 k: v
                 for k, v in cls.__dict__.items()
                 if not k.startswith("_") and isinstance(v, ModelSerializerType)
             }
         )
-        Schema._update_schema()
+        # cls._update_schema()
+
+    @classproperty
+    def schema(cls):
+        if cls._schema is None:
+            cls._update_schema()
+        return cls._schema
 
     @classmethod
     def register_type(cls, type_: "ModelSerializerType"):
@@ -329,7 +343,7 @@ class Schema:
                 resolve=resolve_update,
             )
 
-        Schema.schema = GraphQLSchema(query, mutation)
+        cls._schema = GraphQLSchema(query, mutation)
 
 
 class ModelSerializerType:
