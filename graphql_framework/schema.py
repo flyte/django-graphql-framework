@@ -387,9 +387,9 @@ class ModelSerializerType:
         field: str = "",
         list_field: str = None,
         queryset: QuerySet = None,
-        create_mutation: bool = True,
-        update_mutation: bool = True,
-        delete_mutation: bool = True,
+        create_mutation: bool = False,
+        update_mutation: bool = False,
+        delete_mutation: bool = False,
     ):
         self.name = name or self.__class__.__name__
         self.singular_lookup_fields = singular_lookup_fields
