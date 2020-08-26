@@ -343,6 +343,27 @@ class Schema:
                 resolve=resolve_update,
             )
 
+            # Delete mutation
+            if type_.delete_mutation:
+
+                def resolve_delete(root, info, type_=type_, **kwargs):
+                    pk = kwargs[type_.model._meta.pk.name]
+                    instance = type_.queryset.get(pk=pk)
+                    instance.delete()
+                    return instance
+
+                # TODO: Tasks pending completion -@flyte at 26/08/2020, 10:46:55
+                # Remove hardcoded Int for primary key and work out the right field type
+                mutation.fields[f"delete_{toplevel_field_name}"] = GraphQLField(
+                    cls.objecttype_registry[type_.model],
+                    args={
+                        type_.model._meta.pk.name: GraphQLArgument(
+                            GraphQLNonNull(GraphQLInt)
+                        )
+                    },
+                    resolve=resolve_delete,
+                )
+
         cls._schema = GraphQLSchema(query, mutation)
 
 
@@ -366,8 +387,9 @@ class ModelSerializerType:
         field: str = "",
         list_field: str = None,
         queryset: QuerySet = None,
-        create_mutation: bool = False,
-        update_mutation: bool = False,
+        create_mutation: bool = True,
+        update_mutation: bool = True,
+        delete_mutation: bool = True,
     ):
         self.name = name or self.__class__.__name__
         self.singular_lookup_fields = singular_lookup_fields
@@ -377,4 +399,5 @@ class ModelSerializerType:
         self.queryset = queryset if queryset is not None else self.model.objects.all()
         self.create_mutation = create_mutation
         self.update_mutation = update_mutation
+        self.delete_mutation = delete_mutation
         Schema.register_type(self)
