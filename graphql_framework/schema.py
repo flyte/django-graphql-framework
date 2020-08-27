@@ -152,10 +152,10 @@ class Schema:
             for field_name, field in serializer.fields.items():
                 if (
                     isinstance(field, RelatedField)
-                    and field.queryset.model in cls.objecttype_registry
+                    and field.parent.__class__.Meta.model in cls.objecttype_registry
                 ):
                     obj_type.fields[field_name] = GraphQLField(
-                        cls.objecttype_registry[field.queryset.model]
+                        cls.objecttype_registry[field.parent.__class__.Meta.model]
                     )
                 elif (
                     isinstance(field, ManyRelatedField)
@@ -189,15 +189,15 @@ class Schema:
             for field_name, field in serializer.fields.items():
                 if (
                     not isinstance(field, RelatedField)
-                    or field.queryset.model not in cls.objecttype_registry
+                    or field.parent.__class__.Meta.model not in cls.objecttype_registry
                 ):
                     continue
                 for relation_field_name, relation_field in cls.objecttype_registry[
-                    field.queryset.model
+                    field.parent.__class__.Meta.model
                 ].fields.items():
                     # Don't add a lookup arg for SerializerMethodFields
                     if isinstance(
-                        cls.modelserializer_registry[field.queryset.model]
+                        cls.modelserializer_registry[field.parent.__class__.Meta.model]
                         .serializer_cls()
                         .fields[relation_field_name],
                         SerializerMethodField,
