@@ -9,7 +9,7 @@ from graphql_framework.fields import (
 )
 from graphql_framework.mixins import ModelSerializerExtraFieldsMixin
 
-from .models import UserAttribute
+from .models import UserAttribute, UserAttribute2
 
 User = get_user_model()
 
@@ -32,11 +32,23 @@ class UserSerializer(ModelSerializerExtraFieldsMixin, ModelSerializer):
         return f"{obj.first_name} {obj.last_name}"
 
 
-class UserAttributeSerializer(ModelSerializer):
-    name_and_height = ModelPropertyField(CharField, "name_and_height")
-    double_height = ModelMethodField(FloatField, "get_height_with_mult", method_args=(2,))
-    triple_height = ModelMethodField(FloatField, "get_height_with_mult", method_args=(3,))
+class UserAttributeSerializer(ModelSerializerExtraFieldsMixin, ModelSerializer):
+    name_and_height = ModelPropertyField(CharField, "name_and_height", required=False)
+    double_height = ModelMethodField(
+        FloatField, "get_height_with_mult", method_args=(2,), required=False
+    )
+    triple_height = ModelMethodField(
+        FloatField, "get_height_with_mult", method_args=(3,), required=False
+    )
 
     class Meta:
         model = UserAttribute
+        fields = "__all__"
+        extra_fields = ["more"]
+        read_only_fields = ["more"]
+
+
+class UserAttribute2Serializer(ModelSerializer):
+    class Meta:
+        model = UserAttribute2
         fields = "__all__"

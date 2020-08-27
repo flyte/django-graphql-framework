@@ -159,18 +159,16 @@ class Schema:
                     )
                 elif (
                     isinstance(field, ManyRelatedField)
-                    and field.child_relation.queryset.model in cls.objecttype_registry
+                    and field.parent.__class__.Meta.model in cls.objecttype_registry
                 ):
 
                     def field_resolver(source, info, **kwargs):
                         return getattr(source, info.field_name).all()
 
-                    if field.child_relation.queryset.model in cls.objecttype_registry:
+                    if field.parent.__class__.Meta.model in cls.objecttype_registry:
                         obj_type.fields[field_name] = GraphQLField(
                             GraphQLList(
-                                cls.objecttype_registry[
-                                    field.child_relation.queryset.model
-                                ]
+                                cls.objecttype_registry[field.parent.__class__.Meta.model]
                             ),
                             resolve=field_resolver,
                         )

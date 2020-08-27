@@ -2,8 +2,8 @@ from django.contrib.auth import get_user_model
 
 from graphql_framework.schema import ModelSerializerType, Schema
 
-from .models import UserAttribute
-from .serializers import UserAttributeSerializer, UserSerializer
+from .models import UserAttribute, UserAttribute2
+from .serializers import UserAttribute2Serializer, UserAttributeSerializer, UserSerializer
 
 User = get_user_model()
 
@@ -13,6 +13,10 @@ class UserType(ModelSerializerType, serializer_cls=UserSerializer):
 
 
 class UserAttributeType(ModelSerializerType, serializer_cls=UserAttributeSerializer):
+    pass
+
+
+class UserAttribute2Type(ModelSerializerType, serializer_cls=UserAttribute2Serializer):
     pass
 
 
@@ -28,6 +32,7 @@ class MySchema(Schema):
         list_field=None,  # Set to None to not use one
         create_mutation=False,
         update_mutation=True,
+        delete_mutation=False,
     )
 
     user_attribute = UserAttributeType(
@@ -36,4 +41,14 @@ class MySchema(Schema):
         list_field="user_attributes",
         create_mutation=True,
         update_mutation=True,
+        delete_mutation=True,
+    )
+
+    user_attribute2 = UserAttribute2Type(
+        singular_lookup_fields=("id",),
+        list_lookup_fields=None,  # None means all here
+        list_field="user_attribute2s",
+        create_mutation=True,
+        update_mutation=True,
+        delete_mutation=True,
     )

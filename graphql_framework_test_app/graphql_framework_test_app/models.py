@@ -14,3 +14,14 @@ class UserAttribute(models.Model):
 
     def get_height_with_mult(self, mult):
         return self.height * mult
+
+
+class UserAttribute2(models.Model):
+    """
+    A contrived model for testing related names.
+    """
+
+    user_attribute = models.ForeignKey(
+        UserAttribute, on_delete=models.CASCADE, related_name="more"
+    )
+    weight = models.FloatField()
