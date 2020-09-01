@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework.fields import CharField, FloatField
+from rest_framework.relations import RelatedField
 from rest_framework.serializers import ModelSerializer
 
 from graphql_framework.fields import (
@@ -45,7 +46,7 @@ class UserAttributeSerializer(ModelSerializerExtraFieldsMixin, ModelSerializer):
         model = UserAttribute
         fields = "__all__"
         extra_fields = ["more"]
-        read_only_fields = ["more"]
+        extra_kwargs = {"more": dict(required=False)}
 
 
 class UserAttribute2Serializer(ModelSerializer):

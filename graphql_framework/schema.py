@@ -39,11 +39,11 @@ if TYPE_CHECKING:
 
 
 class classproperty(object):
-    def __init__(self, f):
-        self.f = f
+    def __init__(self, func):
+        self.func = func
 
     def __get__(self, obj, owner):
-        return self.f(owner)
+        return self.func(owner)
 
 
 def serializer_field_to_gql_field(serializer_field: Type[SerializerField], **kwargs):
@@ -152,23 +152,25 @@ class Schema:
             for field_name, field in serializer.fields.items():
                 if (
                     isinstance(field, RelatedField)
-                    and field.parent.__class__.Meta.model in cls.objecttype_registry
+                    and field.queryset.model in cls.objecttype_registry
                 ):
                     obj_type.fields[field_name] = GraphQLField(
-                        cls.objecttype_registry[field.parent.__class__.Meta.model]
+                        cls.objecttype_registry[field.queryset.model]
                     )
                 elif (
                     isinstance(field, ManyRelatedField)
-                    and field.parent.__class__.Meta.model in cls.objecttype_registry
+                    and field.child_relation.queryset.model in cls.objecttype_registry
                 ):
 
                     def field_resolver(source, info, **kwargs):
                         return getattr(source, info.field_name).all()
 
-                    if field.parent.__class__.Meta.model in cls.objecttype_registry:
+                    if field.child_relation.queryset.model in cls.objecttype_registry:
                         obj_type.fields[field_name] = GraphQLField(
                             GraphQLList(
-                                cls.objecttype_registry[field.parent.__class__.Meta.model]
+                                cls.objecttype_registry[
+                                    field.child_relation.queryset.model
+                                ]
                             ),
                             resolve=field_resolver,
                         )
@@ -189,15 +191,15 @@ class Schema:
             for field_name, field in serializer.fields.items():
                 if (
                     not isinstance(field, RelatedField)
-                    or field.parent.__class__.Meta.model not in cls.objecttype_registry
+                    or field.queryset.model not in cls.objecttype_registry
                 ):
                     continue
                 for relation_field_name, relation_field in cls.objecttype_registry[
-                    field.parent.__class__.Meta.model
+                    field.queryset.model
                 ].fields.items():
                     # Don't add a lookup arg for SerializerMethodFields
                     if isinstance(
-                        cls.modelserializer_registry[field.parent.__class__.Meta.model]
+                        cls.modelserializer_registry[field.queryset.model]
                         .serializer_cls()
                         .fields[relation_field_name],
                         SerializerMethodField,
