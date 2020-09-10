@@ -117,5 +117,6 @@ USE_TZ = True
 STATIC_URL = "/static/"
 
 GRAPHQL_FRAMEWORK = dict(schema="graphql_framework_test_app.schema", api_url="/graphql/")
-
+GRAPHQL_FRAMEWORK_GQL_VIEW_WRAPPERS = ["django.contrib.auth.decorators.login_required"]
+LOGIN_URL = "/admin/login/"
 CORS_ORIGIN_ALLOW_ALL = True
