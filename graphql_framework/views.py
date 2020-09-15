@@ -72,6 +72,7 @@ def process_graphql_req(request):
         Schema.schema,
         query,
         None,
+        context_value=dict(user=request.user),
         variable_values=variables,
         operation_name=operation_name,
     )

@@ -29,7 +29,7 @@ class MySchema(Schema):
     user = UserType(
         singular_lookup_fields=("id", "first_name", "username", "email"),
         field="user",  # Otherwise will just use the field name we assigned it to. None to not use one.
-        list_field=None,  # Set to None to not use one
+        list_field="users",  # Set to None to not use one
         create_mutation=False,
         update_mutation=True,
         delete_mutation=False,

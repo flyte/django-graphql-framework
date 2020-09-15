@@ -11,6 +11,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.7"
 graphql-core = ">=3"
+django-guardian = "^2.3.0"
 
 [tool.poetry.dev-dependencies]
 rope = "^0.17.0"

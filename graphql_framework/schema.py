@@ -26,6 +26,7 @@ from graphql_framework.fields import (
     ModelPropertyField,
     TypedSerializerMethodField,
 )
+from guardian.shortcuts import get_objects_for_user
 
 from .converter import to_gql_type
 
@@ -59,6 +60,50 @@ def serializer_field_to_gql_field(serializer_field: Type[SerializerField], **kwa
     except NotImplementedError:
         return None
     return GraphQLField(gql_type, **kwargs)
+
+
+class ModelSerializerType:
+    """
+    Turns a Django REST Framework Serializer into a GraphQL CRUD schema.
+    """
+
+    serializer_cls = None  # type: Type[ModelSerializer]
+    model = None  # type: Type[Model]
+
+    def __init_subclass__(cls, serializer_cls: Type[ModelSerializer]):
+        cls.serializer_cls = serializer_cls
+        cls.model = serializer_cls.Meta.model
+
+    def __init__(
+        self,
+        name: str = None,
+        singular_lookup_fields: tuple = None,
+        list_lookup_fields: tuple = None,
+        field: str = "",
+        list_field: str = None,
+        queryset: QuerySet = None,
+        create_mutation: bool = False,
+        update_mutation: bool = False,
+        delete_mutation: bool = False,
+        create_permission: str = None,
+        update_permission: str = None,
+        delete_permission: str = None,
+        view_permission: str = None,
+    ):
+        self.name = name or self.__class__.__name__
+        self.singular_lookup_fields = singular_lookup_fields
+        self.list_lookup_fields = list_lookup_fields
+        self.field = field
+        self.list_field = list_field
+        self.queryset = queryset if queryset is not None else self.model.objects.all()
+        self.create_mutation = create_mutation
+        self.update_mutation = update_mutation
+        self.delete_mutation = delete_mutation
+        self.create_permission = create_permission or f"add_{field}"
+        self.update_permission = update_permission or f"change_{field}"
+        self.delete_permission = delete_permission or f"delete_{field}"
+        self.view_permission = view_permission or f"view_{field}"
+        Schema.register_type(self)
 
 
 class Schema:
@@ -233,7 +278,10 @@ class Schema:
             if singular_field_name is not None:
 
                 def resolve_singular(root, info, type_=type_, **kwargs):
-                    return type_.queryset.get(**kwargs)
+                    obj = type_.queryset.get(**kwargs)
+                    if not info.context["user"].has_perm(type_.view_permission, obj):
+                        raise Exception("Permission denied")
+                    return obj
 
                 query.fields[singular_field_name] = GraphQLField(
                     cls.objecttype_registry[type_.model],
@@ -245,7 +293,11 @@ class Schema:
             if list_field_name is not None:
 
                 def resolve_list(root, info, type_=type_, **kwargs):
-                    return type_.queryset.filter(**kwargs)
+                    return get_objects_for_user(
+                        info.context["user"],
+                        type_.view_permission,
+                        type_.queryset.filter(**kwargs),
+                    )
 
                 query.fields[list_field_name] = GraphQLField(
                     GraphQLList(cls.objecttype_registry[type_.model]),
@@ -289,6 +341,8 @@ class Schema:
             def resolve_create(
                 root, info, type_=type_, data_name=toplevel_field_name, **kwargs
             ):
+                if not info.context["user"].has_perm(type_.create_permission):
+                    raise Exception("Create Permission Denied")
                 data = kwargs[data_name]
                 serializer = type_.serializer_cls(data=data)
                 if not serializer.is_valid():
@@ -320,10 +374,11 @@ class Schema:
                 root, info, type_=type_, data_name=toplevel_field_name, **kwargs
             ):
                 pk = kwargs[type_.model._meta.pk.name]
+                obj = type_.model.objects.get(pk=pk)
+                if not info.context["user"].has_perm(type_.update_permission, obj):
+                    raise Exception("Update Permission Denied")
                 data = kwargs[data_name]
-                serializer = type_.serializer_cls(
-                    type_.model.objects.get(pk=pk), data, partial=True
-                )
+                serializer = type_.serializer_cls(obj, data, partial=True)
                 if not serializer.is_valid():
                     raise ValueError(serializer.errors)
                 return serializer.save()
@@ -348,9 +403,11 @@ class Schema:
 
                 def resolve_delete(root, info, type_=type_, **kwargs):
                     pk = kwargs[type_.model._meta.pk.name]
-                    instance = type_.queryset.get(pk=pk)
-                    instance.delete()
-                    return instance
+                    obj = type_.queryset.get(pk=pk)
+                    if not info.context["user"].has_perm(type_.delete_permission, obj):
+                        raise Exception("Delete Permission Denied")
+                    obj.delete()
+                    return obj
 
                 # TODO: Tasks pending completion -@flyte at 26/08/2020, 10:46:55
                 # Remove hardcoded Int for primary key and work out the right field type
@@ -365,39 +422,3 @@ class Schema:
                 )
 
         cls._schema = GraphQLSchema(query, mutation)
-
-
-class ModelSerializerType:
-    """
-    Turns a Django REST Framework Serializer into a GraphQL CRUD schema.
-    """
-
-    serializer_cls = None  # type: Type[ModelSerializer]
-    model = None  # type: Type[Model]
-
-    def __init_subclass__(cls, serializer_cls: Type[ModelSerializer]):
-        cls.serializer_cls = serializer_cls
-        cls.model = serializer_cls.Meta.model
-
-    def __init__(
-        self,
-        name: str = None,
-        singular_lookup_fields: tuple = None,
-        list_lookup_fields: tuple = None,
-        field: str = "",
-        list_field: str = None,
-        queryset: QuerySet = None,
-        create_mutation: bool = False,
-        update_mutation: bool = False,
-        delete_mutation: bool = False,
-    ):
-        self.name = name or self.__class__.__name__
-        self.singular_lookup_fields = singular_lookup_fields
-        self.list_lookup_fields = list_lookup_fields
-        self.field = field
-        self.list_field = list_field
-        self.queryset = queryset if queryset is not None else self.model.objects.all()
-        self.create_mutation = create_mutation
-        self.update_mutation = update_mutation
-        self.delete_mutation = delete_mutation
-        Schema.register_type(self)

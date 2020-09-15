@@ -40,8 +40,14 @@ INSTALLED_APPS = [
     "corsheaders",
     "graphql_framework",
     "graphql_framework_test_app",
+    "guardian",
     "behave_django",
 ]
+
+AUTHENTICATION_BACKENDS = (
+    "django.contrib.auth.backends.ModelBackend",
+    "guardian.backends.ObjectPermissionBackend",
+)
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
