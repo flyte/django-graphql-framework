@@ -26,7 +26,6 @@ from graphql_framework.fields import (
     ModelPropertyField,
     TypedSerializerMethodField,
 )
-from guardian.shortcuts import get_objects_for_user
 
 from .converter import to_gql_type
 
@@ -89,6 +88,7 @@ class ModelSerializerType:
         update_permission: str = None,
         delete_permission: str = None,
         view_permission: str = None,
+        permissions_enabled: bool = False,
     ):
         self.name = name or self.__class__.__name__
         self.singular_lookup_fields = singular_lookup_fields
@@ -103,6 +103,7 @@ class ModelSerializerType:
         self.update_permission = update_permission or f"change_{field}"
         self.delete_permission = delete_permission or f"delete_{field}"
         self.view_permission = view_permission or f"view_{field}"
+        self.permissions_enabled = permissions_enabled
         Schema.register_type(self)
 
 
@@ -279,7 +280,9 @@ class Schema:
 
                 def resolve_singular(root, info, type_=type_, **kwargs):
                     obj = type_.queryset.get(**kwargs)
-                    if not info.context["user"].has_perm(type_.view_permission, obj):
+                    if type_.permissions_enabled and not info.context["user"].has_perm(
+                        type_.view_permission, obj
+                    ):
                         raise Exception("Permission denied")
                     return obj
 
@@ -293,10 +296,13 @@ class Schema:
             if list_field_name is not None:
 
                 def resolve_list(root, info, type_=type_, **kwargs):
+                    qs = type_.queryset.filter(**kwargs)
+                    if not type_.permissions_enabled:
+                        return qs
+                    from guardian.shortcuts import get_objects_for_user
+
                     return get_objects_for_user(
-                        info.context["user"],
-                        type_.view_permission,
-                        type_.queryset.filter(**kwargs),
+                        info.context["user"], type_.view_permission, qs
                     )
 
                 query.fields[list_field_name] = GraphQLField(
@@ -341,7 +347,9 @@ class Schema:
             def resolve_create(
                 root, info, type_=type_, data_name=toplevel_field_name, **kwargs
             ):
-                if not info.context["user"].has_perm(type_.create_permission):
+                if type_.permissions_enabled and not info.context["user"].has_perm(
+                    type_.create_permission
+                ):
                     raise Exception("Create Permission Denied")
                 data = kwargs[data_name]
                 serializer = type_.serializer_cls(data=data)
@@ -375,7 +383,9 @@ class Schema:
             ):
                 pk = kwargs[type_.model._meta.pk.name]
                 obj = type_.model.objects.get(pk=pk)
-                if not info.context["user"].has_perm(type_.update_permission, obj):
+                if type_.permissions_enabled and not info.context["user"].has_perm(
+                    type_.update_permission, obj
+                ):
                     raise Exception("Update Permission Denied")
                 data = kwargs[data_name]
                 serializer = type_.serializer_cls(obj, data, partial=True)
@@ -404,7 +414,9 @@ class Schema:
                 def resolve_delete(root, info, type_=type_, **kwargs):
                     pk = kwargs[type_.model._meta.pk.name]
                     obj = type_.queryset.get(pk=pk)
-                    if not info.context["user"].has_perm(type_.delete_permission, obj):
+                    if type_.permissions_enabled and not info.context["user"].has_perm(
+                        type_.delete_permission, obj
+                    ):
                         raise Exception("Delete Permission Denied")
                     obj.delete()
                     return obj
