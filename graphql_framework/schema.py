@@ -106,6 +106,10 @@ class ModelSerializerType:
         self.permissions_enabled = permissions_enabled
         Schema.register_type(self)
 
+    @staticmethod
+    def create_permitted(user, data):
+        return True
+
 
 class Schema:
     _types = {}  # type: Dict[str, ModelSerializerType]
@@ -347,11 +351,15 @@ class Schema:
             def resolve_create(
                 root, info, type_=type_, data_name=toplevel_field_name, **kwargs
             ):
-                if type_.permissions_enabled and not info.context["user"].has_perm(
-                    type_.create_permission
-                ):
-                    raise Exception("Create Permission Denied")
                 data = kwargs[data_name]
+                if type_.permissions_enabled:
+                    if not all(
+                        (
+                            info.context["user"].has_perm(type_.create_permission),
+                            type_.create_permitted(info.context["user"], data),
+                        )
+                    ):
+                        raise Exception("Create Permission Denied")
                 serializer = type_.serializer_cls(data=data)
                 if not serializer.is_valid():
                     raise ValueError(serializer.errors)
