@@ -352,6 +352,8 @@ class Schema:
                 root, info, type_=type_, data_name=toplevel_field_name, **kwargs
             ):
                 data = kwargs[data_name]
+                if not serializer.is_valid():
+                    raise ValueError(serializer.errors)
                 if type_.permissions_enabled:
                     if not all(
                         (
@@ -361,8 +363,6 @@ class Schema:
                     ):
                         raise Exception("Create Permission Denied")
                 serializer = type_.serializer_cls(data=data)
-                if not serializer.is_valid():
-                    raise ValueError(serializer.errors)
                 return serializer.save()
 
             if type_.create_mutation:
