@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
 
-class classproperty(object):
+class classproperty(object):  # pylint: disable=invalid-name
     def __init__(self, func):
         self.func = func
 
@@ -107,7 +107,11 @@ class ModelSerializerType:
         Schema.register_type(self)
 
     @staticmethod
-    def create_permitted(user, data):
+    def create_permitted(user, data):  # pylint: disable=unused-argument
+        return True
+
+    @staticmethod
+    def update_permitted(user, instance, data):  # pylint: disable=unused-argument
         return True
 
 
@@ -129,7 +133,7 @@ class Schema:
         # cls._update_schema()
 
     @classproperty
-    def schema(cls):
+    def schema(cls):  # pylint: disable=no-self-argument
         if cls._schema is None:
             cls._update_schema()
         return cls._schema
@@ -145,7 +149,9 @@ class Schema:
             field_kwargs = {}
             if isinstance(field, TypedSerializerMethodField):
 
-                def resolve_tsm_field(source, info, type_=type_, field=field, **kwargs):
+                def resolve_tsm_field(
+                    source, info, type_=type_, field=field, **kwargs
+                ):  # pylint: disable=unused-argument
                     return getattr(type_.serializer_cls(source), field.method_name)(
                         source
                     )
@@ -153,13 +159,17 @@ class Schema:
                 field_kwargs["resolve"] = resolve_tsm_field
             elif isinstance(field, ModelPropertyField):
 
-                def resolve_mp_field(source, info, type_=type_, field=field, **kwargs):
+                def resolve_mp_field(
+                    source, info, type_=type_, field=field, **kwargs
+                ):  # pylint: disable=unused-argument
                     return getattr(source, field.property_name)
 
                 field_kwargs["resolve"] = resolve_mp_field
             elif isinstance(field, ModelMethodField):
 
-                def resolve_mm_field(source, info, type_=type_, field=field, **kwargs):
+                def resolve_mm_field(
+                    source, info, type_=type_, field=field, **kwargs
+                ):  # pylint: disable=unused-argument
                     func = getattr(source, field.method_name)
                     return func(*field.method_args, **field.method_kwargs)
 
@@ -212,7 +222,9 @@ class Schema:
                     and field.child_relation.queryset.model in cls.objecttype_registry
                 ):
 
-                    def field_resolver(source, info, **kwargs):
+                    def field_resolver(
+                        source, info, **kwargs
+                    ):  # pylint: disable=unused-argument
                         return getattr(source, info.field_name).all()
 
                     if field.child_relation.queryset.model in cls.objecttype_registry:
@@ -282,7 +294,9 @@ class Schema:
 
             if singular_field_name is not None:
 
-                def resolve_singular(root, info, type_=type_, **kwargs):
+                def resolve_singular(
+                    root, info, type_=type_, **kwargs
+                ):  # pylint: disable=unused-argument
                     obj = type_.queryset.get(**kwargs)
                     if type_.permissions_enabled and not info.context["user"].has_perm(
                         type_.view_permission, obj
@@ -299,11 +313,15 @@ class Schema:
                 )
             if list_field_name is not None:
 
-                def resolve_list(root, info, type_=type_, **kwargs):
-                    qs = type_.queryset.filter(**kwargs)
+                def resolve_list(
+                    root, info, type_=type_, **kwargs
+                ):  # pylint: disable=unused-argument
+                    qs = type_.queryset.filter(**kwargs)  # pylint: disable=invalid-name
                     if not type_.permissions_enabled:
                         return qs
-                    from guardian.shortcuts import get_objects_for_user
+                    from guardian.shortcuts import (  # pylint: disable=import-outside-toplevel
+                        get_objects_for_user,
+                    )
 
                     return get_objects_for_user(
                         info.context["user"], type_.view_permission, qs
@@ -336,7 +354,9 @@ class Schema:
                     if isinstance(field, PrimaryKeyRelatedField):
                         # TODO: Tasks pending completion -@flyte at 11/08/2020, 17:53:41
                         # Make a module to convert Django types to GraphQL ones
-                        model_pk_type = field.queryset.model._meta.pk
+                        model_pk_type = (
+                            field.queryset.model._meta.pk  # pylint: disable=protected-access
+                        )
                         if isinstance(model_pk_type, models.AutoField):
                             gql_type = GraphQLNonNull(GraphQLInt)
                     # TODO: Tasks pending completion -@flyte at 11/08/2020, 17:55:19
@@ -350,7 +370,7 @@ class Schema:
 
             def resolve_create(
                 root, info, type_=type_, data_name=toplevel_field_name, **kwargs
-            ):
+            ):  # pylint: disable=unused-argument
                 data = kwargs[data_name]
                 serializer = type_.serializer_cls(data=data)
                 if not serializer.is_valid():
@@ -388,17 +408,23 @@ class Schema:
 
             def resolve_update(
                 root, info, type_=type_, data_name=toplevel_field_name, **kwargs
-            ):
-                pk = kwargs[type_.model._meta.pk.name]
+            ):  # pylint: disable=unused-argument
+                pk = kwargs[  # pylint: disable=invalid-name
+                    type_.model._meta.pk.name  # pylint: disable=protected-access
+                ]
                 obj = type_.model.objects.get(pk=pk)
-                if type_.permissions_enabled and not info.context["user"].has_perm(
-                    type_.update_permission, obj
-                ):
-                    raise Exception("Update Permission Denied")
                 data = kwargs[data_name]
                 serializer = type_.serializer_cls(obj, data, partial=True)
                 if not serializer.is_valid():
                     raise ValueError(serializer.errors)
+                if type_.permissions_enabled:
+                    if not all(
+                        (
+                            info.context["user"].has_perm(type_.update_permission, obj),
+                            type_.update_permitted(info.context["user"], obj, data),
+                        )
+                    ):
+                        raise Exception("Update Permission Denied")
                 return serializer.save()
 
             # TODO: Tasks pending completion -@flyte at 12/08/2020, 12:17:05
@@ -406,7 +432,7 @@ class Schema:
             mutation.fields[f"update_{toplevel_field_name}"] = GraphQLField(
                 cls.objecttype_registry[type_.model],
                 args={
-                    type_.model._meta.pk.name: GraphQLArgument(
+                    type_.model._meta.pk.name: GraphQLArgument(  # pylint: disable=protected-access
                         GraphQLNonNull(GraphQLInt)
                     ),
                     toplevel_field_name: GraphQLArgument(
@@ -419,8 +445,12 @@ class Schema:
             # Delete mutation
             if type_.delete_mutation:
 
-                def resolve_delete(root, info, type_=type_, **kwargs):
-                    pk = kwargs[type_.model._meta.pk.name]
+                def resolve_delete(
+                    root, info, type_=type_, **kwargs
+                ):  # pylint: disable=unused-argument
+                    pk = kwargs[  # pylint: disable=invalid-name
+                        type_.model._meta.pk.name  # pylint: disable=protected-access
+                    ]
                     obj = type_.queryset.get(pk=pk)
                     if type_.permissions_enabled and not info.context["user"].has_perm(
                         type_.delete_permission, obj
@@ -434,7 +464,7 @@ class Schema:
                 mutation.fields[f"delete_{toplevel_field_name}"] = GraphQLField(
                     cls.objecttype_registry[type_.model],
                     args={
-                        type_.model._meta.pk.name: GraphQLArgument(
+                        type_.model._meta.pk.name: GraphQLArgument(  # pylint: disable=protected-access
                             GraphQLNonNull(GraphQLInt)
                         )
                     },

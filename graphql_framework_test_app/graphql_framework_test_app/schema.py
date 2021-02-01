@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 
 from graphql_framework.schema import ModelSerializerType, Schema
 
-from .models import UserAttribute, UserAttribute2
 from .serializers import UserAttribute2Serializer, UserAttributeSerializer, UserSerializer
 
 User = get_user_model()
